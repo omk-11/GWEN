@@ -1,7 +1,6 @@
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
-from datetime import datetime
 
 
 def authenticate_google_calendar():
@@ -15,16 +14,27 @@ def authenticate_google_calendar():
     with open('token.json', 'w') as token:
         token.write(creds.to_json())
 
-
 def create_event(summary, start_time, end_time):
     creds = Credentials.from_authorized_user_file('tools/reminder/token.json')
     service = build('calendar', 'v3', credentials=creds)
 
-    print("Creating event:", summary, start_time, end_time)
     event = {
         'summary': summary,
-        'start': {'dateTime': start_time, 'timeZone': 'Asia/Kolkata'},
-        'end': {'dateTime': end_time, 'timeZone': 'Asia/Kolkata'},
+        'start': {
+            'dateTime': start_time,
+            'timeZone': 'Asia/Kolkata'
+        },
+        'end': {
+            'dateTime': end_time,
+            'timeZone': 'Asia/Kolkata'
+        },
     }
 
-    service.events().insert(calendarId='primary', body=event).execute()
+    created_event = service.events().insert(
+        calendarId='primary',
+        body=event
+    ).execute()
+
+    # print("CREATED EVENT:", created_event)
+
+    return created_event
