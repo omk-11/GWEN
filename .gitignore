@@ -3,3 +3,8 @@ token.json
 notes
 excalidraw
 GWEN-ENV
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+session.txt

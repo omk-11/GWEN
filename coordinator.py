@@ -1,24 +1,29 @@
 import json
 import requests
-import os
 import datetime
+import asyncio
+
 from tools.reminder.reminder import create_event
+from tools.telegram.sendMessage import send_telegram_message
 
 import pytz
 import dateparser
 
 
-# 🔌 Call local LLM
+# ---------------- LLM ---------------- #
+
 def call_llm(prompt):
-    res = requests.post("http://localhost:11434/api/generate", json={
-        "model": "qwen2.5:3b",
-        "prompt": prompt,
-        "stream": False
-    })
+    res = requests.post(
+        "http://localhost:11434/api/generate",
+        json={
+            "model": "qwen2.5:3b",
+            "prompt": prompt,
+            "stream": False
+        }
+    )
     return res.json()["response"]
 
 
-# 🧠 Extract JSON safely
 def extract_json(text):
     try:
         return json.loads(text)
@@ -35,8 +40,9 @@ def extract_json(text):
     return None
 
 
-# 🚀 Main handler
-def handle_request(user_text):
+# ---------------- MAIN ENTRY ---------------- #
+
+async def handle_request(user_text):
     print("🧠 Coordinator got:", user_text)
 
     with open('prompthub/coordinator.json', 'r') as file:
@@ -50,38 +56,45 @@ User input: {user_text}
 """
 
     llm_output = call_llm(prompt)
-    print("🤖 LLM raw:", llm_output)
+    print("LLM raw:", llm_output)
 
     parsed = extract_json(llm_output)
 
     if not parsed:
-        return {"error": "Invalid JSON from LLM"}
+        return {"error": "Invalid JSON from LLM "}
 
-    return route_intent(parsed)
+    return await route_intent(parsed)
 
 
-# 🔀 Router
-def route_intent(data):
+# ---------------- ROUTER ---------------- #
+
+async def route_intent(data):
     intent = data.get("intent")
-    print("Intent:", intent)
+    print("🎯 Intent:", intent)
 
-    if intent == "reminder":
-        return handle_reminder(data)
+    TOOL_MAP = {
+        "reminder": handle_reminder,   # sync
+        "text": send_telegram_text,    # async
+    }
 
-    elif intent == "search":
-        return handle_search(data)
+    func = TOOL_MAP.get(intent)
 
-    else:
+    if not func:
         return {"status": "unknown intent", "data": data}
 
+    if asyncio.iscoroutinefunction(func):
+        return await func(data)
+    else:
+        return func(data)
 
-# ⏰ Reminder handler (FIXED CORE)
+
+# ---------------- TOOLS ---------------- #
+
 def handle_reminder(data):
     task = data.get("data")
     time_str = data.get("date")
 
     print(f"⏰ Reminder: {task} at {time_str}")
-
 
     tz = pytz.timezone("Asia/Kolkata")
 
@@ -96,19 +109,13 @@ def handle_reminder(data):
     if not parsed_time:
         return {"error": f"Could not parse date: {time_str}"}
 
-    # 🔥 FORCE correct timezone (no double conversion)
     parsed_time = parsed_time.astimezone(tz)
 
-    # Ensure timezone-aware
     if parsed_time.tzinfo is None:
         parsed_time = tz.localize(parsed_time)
-    else:
-        parsed_time = parsed_time.astimezone(tz)
 
-    # Add duration
     end_time = parsed_time + datetime.timedelta(hours=1)
-    print("DEBUG:", parsed_time, parsed_time.tzinfo)
-    # Send CLEAN ISO format
+
     create_event(
         task,
         parsed_time.isoformat(),
@@ -122,13 +129,8 @@ def handle_reminder(data):
     }
 
 
-# 🔍 Search handler
-def handle_search(data):
-    query = data.get("data", {}).get("query")
+async def send_telegram_text(data):
+    msg = data.get("data", "Hello from GWEN!")
+    target = data.get("target", "tacs_86")
 
-    print(f"🔍 Searching for: {query}")
-
-    return {
-        "status": "search_done",
-        "query": query
-    }
+    return await send_telegram_message(msg, target)
