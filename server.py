@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from coordinator import handle_request
+from event_handler import handle_event
 import asyncio
 
 app = Flask(__name__)
@@ -17,28 +18,37 @@ def voice():
 
     print("\n Received:", text)
 
-    # ✅ RUN async function properly
-    llm_response = loop.run_until_complete(handle_request(text))
+    response = router(text)
 
-    return jsonify({
-        "status": "ok",
-        "received": text,
-        "response": llm_response
-    })
+    return  response
 
+
+def router(user_input):
+    if 'cap' in user_input.lower():
+        handle_event(user_input)
+
+        return 0
+    
+    else:
+        llm_response = loop.run_until_complete(handle_request(user_input))
+
+        return {
+            "status": "ok",
+            "received": user_input,
+            "response": llm_response
+        }
 
 def textTest():
     input_text = input("Enter text: ")
-    llm_output = loop.run_until_complete(handle_request(input_text))
-
-    print("LLM Output:", llm_output)
+    router(input_text)
 
 
 if __name__ == "__main__":
-    mode = 0
+    mode = 1
 
     if mode == 1:
-        textTest()
+        while True:
+            textTest()
         exit(0)
 
     app.run(host="0.0.0.0", port=5000)
